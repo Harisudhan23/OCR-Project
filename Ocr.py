@@ -1,46 +1,71 @@
+import streamlit as st
 import cv2
 import pytesseract
+import Levenshtein
 import numpy as np
-from rapidfuzz import fuzz
-import jiwer
+from PIL import Image
 
-pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"  
+# Set Tesseract Path (Update if necessary)
+pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
 
-def preprocess_image(image_path):
-    """
-    Preprocesses the image to improve OCR accuracy.
-    - Converts to grayscale
-    - Applies adaptive thresholding
-    - Removes noise
-    """
-    img = cv2.imread(image_path)
+def preprocess_image(image):
+    """Convert image to grayscale and apply thresholding."""
+    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    _, thresh = cv2.threshold(gray, 150, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+    return thresh
 
-    # Convert image to grayscale
-    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-
-    # Apply Gaussian Blur to reduce noise
-    blurred = cv2.GaussianBlur(gray, (5, 5), 0)
-
-    # Apply adaptive thresholding for better contrast
-    thresh = cv2.adaptiveThreshold(
-        blurred, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 11, 2
-    )
-
-    processed_path = "processed_image.jpg"
-    cv2.imwrite(processed_path, thresh)  
-    return processed_path
-
-def extract_text(image_path):
-    """
-    Extracts text from an image using Tesseract OCR.
-    """
-    text = pytesseract.image_to_string(image_path)
+def extract_text(image):
+    """Perform OCR on the image using Tesseract."""
+    processed_img = preprocess_image(image)
+    text = pytesseract.image_to_string(processed_img, config='--psm 6')
     return text.strip()
 
+def calculate_cer(ocr_text, reference_text):
+    """Calculate Character Error Rate (CER)."""
+    ocr_text = ocr_text.replace(" ", "")
+    reference_text = reference_text.replace(" ", "")
+    return Levenshtein.distance(ocr_text, reference_text) / max(len(reference_text), 1)
+
+def calculate_wer(ocr_text, reference_text):
+    """Calculate Word Error Rate (WER)."""
+    ocr_words = ocr_text.split()
+    ref_words = reference_text.split()
+    return Levenshtein.distance(" ".join(ocr_words), " ".join(ref_words)) / max(len(ref_words), 1)
+
+# Streamlit UI
+def main():
+   st.title("OCR & Error Rate Calculator")
+
+# Upload Image
+   uploaded_file = st.file_uploader("Upload", type=["png", "jpg", "jpeg"])
+
+   if uploaded_file:
+    # Read image
+      image = Image.open(uploaded_file)
+      image_np = np.array(image)
+    
+      st.image(image, caption="Uploaded Image",  use_container_width=True)
+    
+      # Extract text
+      ocr_text = extract_text(image_np)
+    
+    # Display extracted text
+      st.subheader("📝 Extracted Text")
+      st.text_area("OCR Output", ocr_text, height=200)
+    
+    # Input ground truth text
+      reference_text = st.text_area("✍️ Enter Ground Truth (Reference Text)", height=200)
+    
+      if st.button("Calculate Error Rates"):
+          if reference_text:
+              cer = calculate_cer(ocr_text, reference_text)
+              wer = calculate_wer(ocr_text, reference_text)
+            
+              st.subheader("📊 Error Rate Results")
+              st.write(f"**Character Error Rate (CER):** {cer:.4f}")
+              st.write(f"**Word Error Rate (WER):** {wer:.4f}")
+          else:
+              st.error("Please enter the reference text to calculate CER & WER.")
 
 if __name__ == "__main__":
-    image_path = "C:/Users/Harihara Sudhan N/Downloads/sample_image.jpg"  
-    processed_image = preprocess_image(image_path)  
-    extracted_text = extract_text(processed_image)  
-
-    print("Extracted Text:\n", extracted_text)
+    main()        
