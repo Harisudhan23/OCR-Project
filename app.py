@@ -1,15 +1,17 @@
 import google.generativeai as genai
 from PIL import Image
 import os
-import Levenshtein  # For calculating edit distance
+import Levenshtein  
 import configparser
+from dotenv import load_dotenv
 
+load_dotenv()
 # Load configuration from config.ini
 config = configparser.ConfigParser()
 config.read('config.ini')
 
 # Load API Key from the config file
-GOOGLE_API_KEY = config['google_api']['api_key']
+GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
 if not GOOGLE_API_KEY:
     raise ValueError("GOOGLE_API_KEY not set in config file.")
 
@@ -49,13 +51,13 @@ def extract_text_from_handwritten_image(image_path):
 
 def calculate_cer(reference, hypothesis):
     """Calculates the Character Error Rate (CER)."""
-    return Levenshtein.distance(reference, hypothesis) / len(reference)
+    return Levenshtein.distance(reference, hypothesis) / len(reference) 
 
 def calculate_wer(reference, hypothesis):
     """Calculates the Word Error Rate (WER)."""
     ref_words = reference.split()
     hyp_words = hypothesis.split()
-    return Levenshtein.distance(ref_words, hyp_words) / len(ref_words)
+    return Levenshtein.distance(ref_words, hyp_words) / len(ref_words) 
 
 
 if __name__ == "__main__":
@@ -68,7 +70,7 @@ if __name__ == "__main__":
     extracted_text = extract_text_from_handwritten_image(image_path)
 
     if extracted_text:
-        print("Extracted Text (Gemini):\n", extracted_text)
+        print("Extracted Text :\n", extracted_text)
 
         # Calculate CER and WER
         cer = calculate_cer(ground_truth_text, extracted_text)
