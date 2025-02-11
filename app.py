@@ -23,7 +23,7 @@ def extract_text_from_handwritten_image(image_path):
     model = genai.GenerativeModel('gemini-2.0-flash')
 
     try:
-        img = Image.open(image_path)  # Use passed image path
+        img = Image.open(image_path)  
     except FileNotFoundError:
         print(f"Error: Image file not found at {image_path}")
         return None
@@ -48,7 +48,6 @@ def extract_text_from_handwritten_image(image_path):
         print(f"Error during Gemini API call: {e}")
         return None
 
-
 def calculate_cer(reference, hypothesis):
     """Calculates the Character Error Rate (CER)."""
     return Levenshtein.distance(reference, hypothesis) / len(reference) 
@@ -58,7 +57,6 @@ def calculate_wer(reference, hypothesis):
     ref_words = reference.split()
     hyp_words = hypothesis.split()
     return Levenshtein.distance(ref_words, hyp_words) / len(ref_words) 
-
 
 if __name__ == "__main__":
     # Read image path and ground truth text from config file
