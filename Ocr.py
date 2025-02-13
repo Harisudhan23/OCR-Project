@@ -1,71 +1,99 @@
-import streamlit as st
+import os
 import cv2
-import pytesseract
-import Levenshtein
 import numpy as np
+import configparser
+from dotenv import load_dotenv
 from PIL import Image
+import Levenshtein
+from paddleocr import PaddleOCR
 
-# Set Tesseract Path (Update if necessary)
-pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
+load_dotenv()
 
-def preprocess_image(image):
-    """Convert image to grayscale and apply thresholding."""
-    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-    _, thresh = cv2.threshold(gray, 150, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-    return thresh
+# Load configuration from config.ini
+config = configparser.ConfigParser()
+config.read('config.ini')
 
-def extract_text(image):
-    """Perform OCR on the image using Tesseract."""
-    processed_img = preprocess_image(image)
-    text = pytesseract.image_to_string(processed_img, config='--psm 6')
-    return text.strip()
+# Initialize PaddleOCR
+ocr = PaddleOCR(use_angle_cls=True, lang='en')
 
-def calculate_cer(ocr_text, reference_text):
-    """Calculate Character Error Rate (CER)."""
-    ocr_text = ocr_text.replace(" ", "")
-    reference_text = reference_text.replace(" ", "")
-    return Levenshtein.distance(ocr_text, reference_text) / max(len(reference_text), 1)
-
-def calculate_wer(ocr_text, reference_text):
-    """Calculate Word Error Rate (WER)."""
-    ocr_words = ocr_text.split()
-    ref_words = reference_text.split()
-    return Levenshtein.distance(" ".join(ocr_words), " ".join(ref_words)) / max(len(ref_words), 1)
-
-# Streamlit UI
-def main():
-   st.title("OCR & Error Rate Calculator")
-
-# Upload Image
-   uploaded_file = st.file_uploader("Upload", type=["png", "jpg", "jpeg"])
-
-   if uploaded_file:
-    # Read image
-      image = Image.open(uploaded_file)
-      image_np = np.array(image)
+def preprocess_image(image_path):
+    """Preprocesses the image for better OCR."""
+    img = cv2.imread(image_path)
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
     
-      st.image(image, caption="Uploaded Image",  use_container_width=True)
+    # Adaptive Thresholding
+    thresh = cv2.adaptiveThreshold(gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 11, 2)
     
-      # Extract text
-      ocr_text = extract_text(image_np)
+    # Noise Removal
+    kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))
+    opening = cv2.morphologyEx(thresh, cv2.MORPH_OPEN, kernel, iterations=1)
     
-    # Display extracted text
-      st.subheader("📝 Extracted Text")
-      st.text_area("OCR Output", ocr_text, height=200)
+    # Deskewing using hough lines
+    coords = np.column_stack(np.where(opening > 0))
+    angle = cv2.minAreaRect(coords)[-1]
+    if angle < -45:
+        angle = -(90 + angle)
+    else:
+        angle = -angle
+    (h, w) = img.shape[:2]
+    center = (w // 2, h // 2)
+    M = cv2.getRotationMatrix2D(center, angle, 1.0)
+    deskewed = cv2.warpAffine(img, M, (w, h), flags=cv2.INTER_CUBIC, borderMode=cv2.BORDER_REPLICATE)
     
-    # Input ground truth text
-      reference_text = st.text_area("✍️ Enter Ground Truth (Reference Text)", height=200)
+    return deskewed
+
+def extract_text_from_handwritten_image(image_path):
+    """Extracts text from a handwritten image using PaddleOCR."""
+    try:
+        preprocessed_image = preprocess_image(image_path)
+        pil_img = Image.fromarray(preprocessed_image)
+    except FileNotFoundError:
+        print(f"Error: Image file not found at {image_path}")
+        return None
+    except Exception as e:
+        print(f"Error opening image: {e}")
+        return None
     
-      if st.button("Calculate Error Rates"):
-          if reference_text:
-              cer = calculate_cer(ocr_text, reference_text)
-              wer = calculate_wer(ocr_text, reference_text)
-            
-              st.subheader("📊 Error Rate Results")
-              st.write(f"**Character Error Rate (CER):** {cer:.4f}")
-              st.write(f"**Word Error Rate (WER):** {wer:.4f}")
-          else:
-              st.error("Please enter the reference text to calculate CER & WER.")
+    # Convert image to OCR-compatible format
+    extracted_text_results = ocr.ocr(np.array(pil_img), cls=True)
+    extracted_text = " ".join([word_info[1][0] for line in extracted_text_results for word_info in line])
+    return extracted_text.strip()
+
+def calculate_cer(reference, hypothesis):
+    """Calculates the Character Error Rate (CER)."""
+    return Levenshtein.distance(reference, hypothesis) / len(reference) if reference else 1.0
+
+def calculate_wer(reference, hypothesis):
+    """Calculates the Word Error Rate (WER)."""
+    ref_words = reference.split()
+    hyp_words = hypothesis.split()
+    return Levenshtein.distance(ref_words, hyp_words) / len(ref_words) if ref_words else 1.0
 
 if __name__ == "__main__":
-    main()        
+    # Read image path and ground truth text from config file
+    image_path = config['image']['image_path']
+    ground_truth_text_path = config['settings']['ground_truth_text']
+    
+    try:
+        with open(ground_truth_text_path, 'r', encoding='utf-8') as f:
+            ground_truth_text = f.read()
+    except FileNotFoundError:
+        print(f"Error: Ground truth text file not found at {ground_truth_text_path}")
+        ground_truth_text = ""
+    except Exception as e:
+        print(f"Error reading ground truth text file: {e}")
+        ground_truth_text = ""
+    
+    extracted_text = extract_text_from_handwritten_image(image_path)
+    
+    if extracted_text:
+        print("Extracted Text:\n", extracted_text)
+        
+        # Calculate CER and WER
+        cer = calculate_cer(ground_truth_text, extracted_text)
+        wer = calculate_wer(ground_truth_text, extracted_text)
+        
+        print(f"\nCharacter Error Rate (CER): {cer:.4f}")
+        print(f"\nWord Error Rate (WER): {wer:.4f}")
+    else:
+        print("Text extraction failed.")

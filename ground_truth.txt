@@ -1,34 +1,42 @@
-DD
-1289
-FORM
-1 NOV 71
-DOD PRESCRIPTION
-FOR (Full name, address, & phone number) (If under 12, give age) John R. Doe, HM3, USN
-U.S.S. Never forgotten (DD 178)
-MEDICAL FACILITY
-U.S.S. Never forgotten (00 178)
-℞ (Superscription)
-DATE
-23 JAN 99
-gm or ml.
-(Inscription)
-Tr Belladonna
-15 ml
-Amphogel grad
-120 me
-(Subscription)
-M & Ft Solution
-(Signa)
-Seg:
-5ml tid a.c.
-MFGR: LOT NO:
-Wyeth P39K106
-EXP DATE:
-12/02
-FILLED BY: KMT
-Jack R Frost LCDR. MD. USAR
-SIGNATURE RANK AND DEGREE
-EDITION OF 1 JAN 60 MAY BE USED FOR
-S/N 0102-LF-012-6201
-10072
-R NUMBER
+SAI CLINIC
+Near Ambedkar Staue, Miyapur
+Hyderabad
+Dr. Y. Lavanya
+MBBS
+Regd No.: 96510
+Dr. K. Chanakya Chandra Kumar
+MBBS
+Regd No.: 68237
+Name: Tet
+Age/Gender: 30 yo / Male Phone No.
+Date: 17/Oct/2022
+Address:
+
+Rx
+k/c/o - Hypertension & Hypothyroid
+c/o- Fever since 3 days
+
+BP- 140/90
+PR- 80 bpm
+
+Investigations:
+CBP
+CUE
+ECG
+2D Echo
+Thyroid profile
+B. Urea
+Sr. Creatinine
+Dengue Ig G & IgM
+
+Rx
+1) Tab. Stamlo 5mg - 30 days
+   0->x
+2) Tab. Arvant 5mg - 30 day
+   0->x
+3) Tab. Thyrox 75mcg -30 days
+   0->x
+4) Tab. Bplex forte - 30 days
+   x-0-0
+   
+Signature
