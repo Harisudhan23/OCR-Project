@@ -1,0 +1,9 @@
+google.generativeai
+cv2
+requests
+base64
+configparser
+json
+numpy
+Levenshtein
+streamlit
