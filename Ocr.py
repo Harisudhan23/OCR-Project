@@ -38,6 +38,7 @@ def encode_image(image_path):
     except Exception as e:
         print(f"Error reading image file: {e}")
         return None
+<<<<<<< HEAD
 
 # Google Cloud Vision OCR function
 def extract_text_google_vision(image_path, api_key, is_url=False):
@@ -274,3 +275,251 @@ def main():
 
 if __name__ == "__main__":
     main()
+=======
+
+# Google Cloud Vision OCR function
+def extract_text_google_vision(image_path, api_key, is_url=False):
+    url = f"https://vision.googleapis.com/v1/images:annotate?key={api_key}"
+
+    if not is_url:
+        image_path = preprocess_image(image_path)
+
+    image_data = {"source": {"imageUri": image_path}} if is_url else {"content": encode_image(image_path)}
+
+    if not image_data.get("content") and not is_url:
+        print("Error: Could not encode image for OCR.")
+        return ""
+
+    request_data = {
+        "requests": [
+            {
+                "image": image_data,
+                "features": [{"type": "TEXT_DETECTION"}]
+            }
+        ]
+    }
+
+    headers = {"Content-Type": "application/json"}
+    response = requests.post(url, headers=headers, data=json.dumps(request_data))
+
+    if response.status_code == 200:
+        response_data = response.json()
+        extracted_text = response_data["responses"][0].get("fullTextAnnotation", {}).get("text", "").strip()
+        print(f"\n[DEBUG] Raw Extracted Text:\n{extracted_text}")  # Debugging output
+        return extracted_text
+    else:
+        print(f"Error {response.status_code}: {response.text}")
+        return ""
+
+# Medical-specific spelling correction using Gemini AI
+def correct_with_llm(extracted_text, genai_api_key):
+    # Configure Gemini API Key
+    genai.configure(api_key=genai_api_key)
+
+    prompt_template = """
+    "You are an expert in correcting OCR errors across various domains, including medical, legal, financial, technical, and other specialized documents. The text provided below has been extracted from a scanned or handwritten document using OCR technology, but due to recognition errors, some words may be misspelled, misformatted, or inaccurately interpreted.
+
+Your Task:
+Correct Recognition Errors: Fix spelling mistakes, typographical errors, and misrecognized words while ensuring the original meaning remains intact.
+Preserve Domain-Specific Terminology: Do not modify technical, medical, legal, or financial terms unless they contain clear OCR errors.
+Enhance Readability: Ensure proper punctuation, grammar, and formatting while keeping the content faithful to the original.
+Retain Structured Data: Maintain the exact structure of numerical values, dates, monetary amounts, units of measurement, and special characters *(e.g., "5mg", "₹10,000", "17/Oct/2022")*.
+Avoid Unverified Changes: Do not add, remove, or guess missing words—only correct what is evidently incorrect in the OCR output.
+
+    Extracted Text:
+    "{text}"
+
+    Corrected Medical Text:
+    """
+
+    formatted_prompt = prompt_template.format(text=extracted_text)
+
+    try:
+        model = genai.GenerativeModel("gemini-2.0-flash")  
+        response = model.generate_content(formatted_prompt)
+
+        corrected_text = response.text.strip()
+        print(f"\n[DEBUG] Corrected Text:\n{corrected_text}")  # Debugging output
+        return corrected_text
+
+    except Exception as e:
+        print(f"Error with Gemini API: {e}")
+        return extracted_text  
+
+# Find closest matching words
+def find_closest_words(extracted_text, genai_api_key, search_phrases,):
+    # Configure Gemini API Key
+    genai.configure(api_key=genai_api_key)
+
+    # Prepare the search phrases as a list
+    search_phrases = search_phrases.split(", ")  # Allow multiple search terms
+    closest_matches = {}
+
+    for phrase in search_phrases:
+        # Define the prompt to pass to Gemini AI
+        prompt = f"""
+        You are an expert in understanding natural language and OCR text extraction. Given the extracted text below, 
+        find the exact or closest matching phrase for the search phrase. The search phrase might have OCR errors or variations, 
+        but you should prioritize finding the closest full match.
+
+        Extracted Text:
+        "{extracted_text}"
+
+        Search Phrase: "{phrase}"
+
+        Closest Match:
+        """
+
+        try:
+            # Generate content using the Gemini AI model (gemini-2.0-flash)
+            model = genai.GenerativeModel("gemini-2.0-flash")
+            response = model.generate_content(prompt)
+
+            # Retrieve the closest match for the search phrase
+            closest_match = response.text.strip()
+            closest_matches[phrase] = closest_match
+
+        except Exception as e:
+            print(f"Error with Gemini API: {e}")
+            closest_matches[phrase] = "Error finding match"
+
+    return closest_matches
+
+def calculate_cer(ground_truth, predicted_text):
+    if not ground_truth:  # If ground truth is empty
+        return 1 if predicted_text else 0
+    return Levenshtein.distance(ground_truth, predicted_text) / len(ground_truth)
+
+def calculate_wer(ground_truth, predicted_text):
+    ground_truth_words = ground_truth.split()
+    predicted_words = predicted_text.split()
+
+    if not ground_truth_words:  # If ground truth is empty
+        return 1 if predicted_words else 0
+
+    return Levenshtein.distance((ground_truth_words), (predicted_words)) / len(ground_truth_words)
+
+# Summarization using Gemini AI
+def summarize_text(corrected_text, genai_api_key):
+    genai.configure(api_key=genai_api_key)
+    prompt = f"""
+    "You are an expert in summarizing documents from various sectors, including medical, legal, financial, technical, and more. 
+    Given the following corrected text, provide a concise summary that retains key information without altering the meaning.
+    Your summary should be precise, clear, and appropriate for the relevant sector.
+
+    Corrected Text:
+    "{corrected_text}"
+
+    Summary:
+    """
+
+    try:
+        model = genai.GenerativeModel("gemini-2.0-flash")  # Use a lightweight model for speed
+        response = model.generate_content(prompt)
+
+        summary = response.text.strip()
+        print(f"\n[DEBUG] Summary:\n{summary}")  # Debugging output
+        return summary
+
+    except Exception as e:
+        print(f"Error with Gemini API: {e}")
+        return "Summary could not be generated."
+
+
+# Main execution
+st.markdown("""
+    <style>
+        body {
+            background-color: #f0f8ff;
+        }
+        .stButton>button {
+            background-color: #007bff;
+            color: white;
+            font-size: 16px;
+            border-radius: 10px;
+            padding: 8px;
+            width: 100%;
+        }
+        .stTextInput input {
+            background-color:white;
+            border-radius: 5px;
+            padding: 6px;
+        }
+        .stTextArea textarea {
+            background-color: #f7f7f7;
+            border-radius: 5px;
+        }
+    </style>
+""", unsafe_allow_html=True)
+
+# Initialize session state
+if "uploaded_image" not in st.session_state:
+    st.session_state.uploaded_image = None
+if "extracted_text" not in st.session_state:
+    st.session_state.extracted_text = None
+if "corrected_text" not in st.session_state:
+    st.session_state.corrected_text = None
+
+def main():
+    st.title("📄 OCR with AI-powered Correction")
+
+    # Load API keys from config
+    config = load_config()
+    google_api_key = config.get("GoogleCloud", "api_key", fallback="")
+    genai_api_key = config.get("google_api", "api_key", fallback="")
+
+    # Step 1: Upload Image
+    st.subheader("1️⃣ Upload Image for OCR")
+    uploaded_file = st.file_uploader("Upload an image (PNG, JPG, JPEG)", type=["png", "jpg", "jpeg"])
+
+    if uploaded_file and st.button("📤 Submit Image"):
+        st.session_state.uploaded_image = uploaded_file
+        st.session_state.extracted_text = None  # Reset extracted text when new image is uploaded
+        st.session_state.corrected_text = None  # Reset corrected text when new image is uploaded
+
+    if st.session_state.uploaded_image:
+        st.image(st.session_state.uploaded_image, caption="Uploaded Image", use_container_width=True)
+
+        # Step 2: Extract Text
+        if st.button("🔍 Extract Text"):
+            temp_file_path = "uploaded_image.png"
+            with open(temp_file_path, "wb") as f:
+                f.write(st.session_state.uploaded_image.getbuffer())
+
+            st.session_state.extracted_text = extract_text_google_vision(temp_file_path, google_api_key)
+
+    if st.session_state.extracted_text:
+        st.text_area("📝 Extracted Text:", st.session_state.extracted_text, height=150)
+
+        # Step 3: Correct Text
+        if st.button("✨ Correct Text with AI"):
+            st.session_state.corrected_text = correct_with_llm(st.session_state.extracted_text, genai_api_key)
+
+    if st.session_state.corrected_text:
+        st.text_area("✅ AI-Corrected Text:", st.session_state.corrected_text, height=150)
+
+        # Step 4: Search Closest Match
+        st.subheader("🔎 Search Keywords or Phrases")
+        search_word = st.text_input("Enter a keyword or phrase:")
+        if search_word and st.button("🔍 Find Closest Match"):
+            closest_matches = find_closest_words(st.session_state.corrected_text, genai_api_key, search_word)
+            for term, match in closest_matches.items():
+                st.write(f"**Closest match to '{term}':** {match}")
+
+        # Step 5: Generate Summary
+        if st.button("📄 Generate Summary"):
+            summary = summarize_text(st.session_state.corrected_text, genai_api_key)
+            st.text_area("📌 Summary:", summary, height=100)
+
+        # Step 6: Evaluate OCR Performance
+        st.subheader("📊 Error Evaluation (Optional)")
+        ground_truth = st.text_area("Enter ground truth text:")
+        if ground_truth and st.button("📊 Evaluate OCR Performance"):
+            cer = calculate_cer(ground_truth, st.session_state.corrected_text)
+            wer = calculate_wer(ground_truth, st.session_state.corrected_text)
+            st.write(f"**Character Error Rate (CER):** {cer:.2f}")
+            st.write(f"**Word Error Rate (WER):** {wer:.2f}")
+
+if __name__ == "__main__":
+    main()
+>>>>>>> c29f45d7 (update_Ocr)

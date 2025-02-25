@@ -1,4 +1,3 @@
-import streamlit as st
 import re
 import spacy
 import nltk
@@ -6,71 +5,49 @@ from nltk.corpus import words
 from difflib import get_close_matches
 from Levenshtein import distance as lev
 
-# Load NLP model and English words
+# Load NLP model and word list
 nlp = spacy.load("en_core_web_sm")
 nltk.download("words")
 word_list = set(words.words())
 
-# OCR Correction Dictionary (Common OCR mistakes)
-OCR_MAP = str.maketrans("105", "ios")  # Example: "Art1ficial" → "Artificial"
-
-def correct_ocr(word):
-    """Fix common OCR errors like '1' → 'i', '0' → 'o'."""
-    return word.translate(OCR_MAP) # Normalize to lowercase
-
-def extract_words(text):
-    """Extract words from text and apply OCR correction."""
+def find_keyword_matches(text, keyword, context_window=50, max_distance=1):
     doc = nlp(text)
-    words_in_text = set(token.text.lower() for token in doc if token.is_alpha or token.text.isalnum())
-
-    # Apply OCR correction and store both versions
-    corrected_words = {correct_ocr(word) for word in words_in_text}
+    words_in_text = set([token.text for token in doc if token.is_alpha])
     
-    return words_in_text | corrected_words  # Merge original and corrected words
+    # Check if the keyword exists in the document
+    keyword_in_text = keyword in words_in_text
 
-def find_keyword_matches(text, keyword, max_distance=1):
-    """Find exact matches, OCR variants, and words with minor errors."""
-    
-    words_in_text = extract_words(text)
+    # Find closest matches using difflib
+    closest_matches = get_close_matches(keyword, words_in_text, n=5, cutoff=0.7)
 
-    # Convert keyword to lowercase and apply OCR correction
-    corrected_keyword = correct_ocr(keyword)
+    # Find words within Levenshtein distance 1
+    levenshtein_matches = [word for word in words_in_text if lev(keyword, word) <= max_distance]
 
-    # Exact match
-    keyword_in_text = {word for word in words_in_text if word == corrected_keyword}
+    # Spell check suggestions (only if keyword is NOT in text)
+    spell_suggestions = [w for w in word_list if lev(keyword, w) <= max_distance] if not keyword_in_text else []
 
-    # Find closest matches with a stricter cutoff
-    closest_matches = set(get_close_matches(corrected_keyword, words_in_text, cutoff=0.7))
-
-    # Find words with Levenshtein distance ≤ max_distance
-    levenshtein_matches = {word for word in words_in_text if lev(corrected_keyword, word) <= max_distance}
-
-    # Find words with minor truncations or extensions
-    prefix_suffix_matches = {word for word in words_in_text if word.startswith(corrected_keyword) or corrected_keyword.startswith(word)}
-
-    # Combine all results and remove duplicates
-    search_terms = keyword_in_text | closest_matches | levenshtein_matches | prefix_suffix_matches
-
-    # Ensure no false positives
-    search_terms = {word for word in search_terms if lev(corrected_keyword, word) <= max_distance}
-    print("🔍 Extracted Words from Text:", words_in_text)
+    # Collect all possible keywords to search
+    if keyword_in_text:
+        search_terms = {keyword}  # Only exact matches if keyword is correct
+    else:
+        search_terms = set([keyword] + closest_matches + levenshtein_matches + spell_suggestions)
 
     matches = []
     for match in search_terms:
-        for m in re.finditer(re.escape(match), text, re.IGNORECASE):  
-            matches.append(match)
+        for m in re.finditer(r'\b' + re.escape(match) + r'\b', text, re.IGNORECASE):
+            start, end = m.start(), m.end()
+            context_start = max(0, start - context_window)
+            context_end = min(len(text), end + context_window)
+            context = text[context_start:context_end]
+            matches.append((match, context))
 
-    return sorted(set(matches))
+    return matches
 
-st.title("🔍 Keyword Finder with OCR & Levenshtein Matching")
+# Example usage
+document_text = """Your long document text goes here... It contains various words like machine, learning, artificial, intelligence, etc."""
+keyword = "learing"# Correctly spelled keyword
 
-text_input = st.text_area("📜 Enter the text:", height=300)
-keyword_input = st.text_input("🔑 Enter the keyword to search:")
+results = find_keyword_matches(document_text, keyword)
 
-if st.button("Find Matches"):
-    if text_input and keyword_input:
-        matches = find_keyword_matches(text_input, keyword_input)
-        st.subheader("🔎 Words Considered for Search")
-        st.write(", ".join(matches) if matches else "No matches found.")
-    else:
-        st.warning("⚠️ Please enter both text and keyword!")
+for match, context in results:
+    print(f"Found: {match}\nContext: {context}\n---")
